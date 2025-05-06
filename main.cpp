@@ -8,8 +8,10 @@
 #include <cstdint>      // Для uintptr_t
 #include <cerrno>       // Для errno
 #include <cstring>      // Для strerror
-
-
+#include <cstdlib>  // для rand() и srand()
+#include <ctime>    // для time()
+#include <vector>
+#include <functional>
 unsigned long GetAddrantiStepTraceCMP_and_CheckIntegrity();
 
 bool make_memory_writable(unsigned int address, size_t size) {
@@ -224,17 +226,28 @@ unsigned long GetAddrantiStepTraceCMP_and_CheckIntegrity(){
     return int_addr;
 }
 
+std::vector<std::function<int(const std::string&)>> generate_func_arr(int rand1){
+int (*func_ptr)(const std::string&) = password_to_hash;
+    std::vector<std::function<int(const std::string&)>> arr_func;
+    for (int i=0;i<rand1;i++){
+        arr_func.push_back(password_to_hash);
+    }
+    return arr_func;
+}
+
 int main() {
     //int cpustat=GetCPUID(1);
     decrypt();
     int cpustat=encryptGetCPUID(1);
 
-    int family = (cpustat >> 8) & 0xF;
-    int ext_model = (cpustat >> 16) & 0xF;
-    //std::cout<<"stat "<<family<<" "<<ext_model;
-    if (!(obfus_cmp(family,6) && obfus_cmp(ext_model,9))){
-        return 0;
-    }
+    // int family = (cpustat >> 8) & 0xF;
+    // int ext_model = (cpustat >> 16) & 0xF;
+    // //std::cout<<"stat "<<family<<" "<<ext_model;
+    // if (!(obfus_cmp(family,6) && obfus_cmp(ext_model,9))){
+    //     return 0;
+    // }
+
+
 
     std::string login,password;
     std::cout<<"Введите логин ";
@@ -242,10 +255,26 @@ int main() {
     std::cout<<"Введите пароль ";
     std::cin>>password;
 
-    int hash_pass=password_to_hash(password);
+
+    
+    srand(time(nullptr));
+    int rand1 = rand()%255;
+    std::vector<std::function<int(const std::string&)>> vec_func=generate_func_arr(rand1);
+    int rand2 = rand()%rand1;
+    int hash_pass=vec_func[rand2](password);
     int true_pass=52886;
     
-    
+        asm volatile (
+        "jmp inside_mov + 1\n\t"
+        "inside_mov:\n\t"
+        "mov eax, 0x12345678\n\t"   // B8 78 56 34 12
+        "xor eax, eax\n\t"
+        "mov eax, 1\n\t"
+        "nop\n\t"
+        :
+        :
+        : "eax"                        // Список используемых регистров
+    );
     long long t1 = GetTickCountLinux();
     if(antiStepTraceCMP_and_CheckIntegrity(true_pass,hash_pass)){
         printf("password correct");
