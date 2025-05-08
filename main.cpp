@@ -12,6 +12,7 @@
 #include <ctime>    // для time()
 #include <vector>
 #include <functional>
+#include <fstream>
 unsigned long GetAddrantiStepTraceCMP_and_CheckIntegrity();
 
 bool make_memory_writable(unsigned int address, size_t size) {
@@ -234,20 +235,71 @@ int (*func_ptr)(const std::string&) = password_to_hash;
     }
     return arr_func;
 }
+void cpuidCheckVM(uint32_t eax, uint32_t ecx, uint32_t* abcd) {
+    __asm__ volatile("cpuid"
+        : "=a"(abcd[0]), "=b"(abcd[1]), "=c"(abcd[2]), "=d"(abcd[3])
+        : "a"(eax), "c"(ecx));
+}
 
+bool isBeingTraced() {
+    std::ifstream status_file("/proc/self/status"); // Открываем файл статуса текущего процесса
+    std::string line;
+    
+    while (std::getline(status_file, line)) { // Читаем файл построчно
+        if (line.find("TracerPid:") == 0) { // Ищем строку с TracerPid
+            int tracer_pid = std::stoi(line.substr(10)); // Извлекаем значение PID
+            return tracer_pid != 0; // Если не 0 - процесс находится под отладкой
+        }
+    }
+    return false;
+}
+bool antiBreakpoint(volatile char* func_addr) {
+    //volatile char* ptr = (volatile char*)&antiBreakpoint;
+    volatile char* ptr = (volatile char*)&func_addr;
+    
+    for (int i = 0; i < 100; ++i) {
+        if (func_addr[i] == 0xCC) {
+            return 1;
+        }
+    }
+    return 0;
+}
 int main() {
     //int cpustat=GetCPUID(1);
     decrypt();
     int cpustat=encryptGetCPUID(1);
 
-    // int family = (cpustat >> 8) & 0xF;
-    // int ext_model = (cpustat >> 16) & 0xF;
-    // //std::cout<<"stat "<<family<<" "<<ext_model;
-    // if (!(obfus_cmp(family,6) && obfus_cmp(ext_model,9))){
-    //     return 0;
-    // }
+    if (isBeingTraced()){
+        return 1;
+    }
+    int family = (cpustat >> 8) & 0xF;
+    int ext_model = (cpustat >> 16) & 0xF;
+    //std::cout<<"stat "<<family<<" "<<ext_model;
+    if (!(obfus_cmp(family,6) && obfus_cmp(ext_model,9))){
+        return 0;
+    }
 
+     uint32_t abcd[4];
+    cpuidCheckVM(0x40000000, 0, abcd);
+    char hypervisor_vendor[13] = {0};
+    memcpy(hypervisor_vendor, &abcd[1], 4);
+    memcpy(hypervisor_vendor + 4, &abcd[2], 4);
+    memcpy(hypervisor_vendor + 8, &abcd[3], 4);
+    
+    if (strcmp(hypervisor_vendor, "KVMKVMKVM") == 0 ||
+        strcmp(hypervisor_vendor, "VMwareVMware") == 0 ||
+        strcmp(hypervisor_vendor, "Microsoft Hv") == 0 ||
+        strcmp(hypervisor_vendor, "XenVMMXenVMM") == 0 ||
+        strcmp(hypervisor_vendor, "prl hyperv") == 0 ||  
+        strcmp(hypervisor_vendor, "VBoxVBoxVBox") == 0) {
+        return 1;  
+    }
 
+  uint32_t abcd2[4];
+    cpuidCheckVM(1, 0, abcd2);
+    if (abcd2[2] & (1 << 31)) {
+        return 1;  // Hypervisor 
+    }
 
     std::string login,password;
     std::cout<<"Введите логин ";
@@ -273,7 +325,7 @@ int main() {
         "nop\n\t"
         :
         :
-        : "eax"                        // Список используемых регистров
+        : "eax"                    
     );
     long long t1 = GetTickCountLinux();
     if(antiStepTraceCMP_and_CheckIntegrity(true_pass,hash_pass)){
@@ -294,3 +346,10 @@ int main() {
     
     return 0;
 }
+
+
+//Случаный вызов функции
+//jmp  в серединк
+//Строка гипервизора
+//Бит гипервизора
+//Проверка /proc/self/status
