@@ -266,7 +266,19 @@ bool antiBreakpoint(volatile char* func_addr) {
 }
 int main() {
     //int cpustat=GetCPUID(1);
-    decrypt();
+    void (*ext_decrypt)() =decrypt;
+ //   ext_decrypt();
+asm volatile (                    ///ret=call
+        "lea rax, [rip + 1f]\n"   
+        "push rax\n"    
+        "push %0\n"
+        "ret\n"
+        "1:\n"
+        :          
+        : "r" (&decrypt)          
+        : "rax", "edi", "memory"  
+    );
+    //decrypt();
     int cpustat=encryptGetCPUID(1);
 
     if (isBeingTraced()){
@@ -317,7 +329,12 @@ int main() {
     int true_pass=52886;
     
         asm volatile (
-        "jmp inside_mov + 1\n\t"
+        "xor eax,eax\n"  /////////////jz jmp
+        "jz tag\n"
+        "jmp 0x7fecdab\n"
+        "tag:\n"    
+        "jnz inside_mov + 1\n\t" //////////jz jnz
+        "jz inside_mov + 1\n\t"
         "inside_mov:\n\t"
         "mov eax, 0x12345678\n\t"   // B8 78 56 34 12
         "xor eax, eax\n\t"
@@ -353,3 +370,6 @@ int main() {
 //Строка гипервизора
 //Бит гипервизора
 //Проверка /proc/self/status
+// jnz jz
+//Инструкции перехода с постоянным условием
+//ret=call
