@@ -13,6 +13,8 @@
 #include <vector>
 #include <functional>
 #include <fstream>
+#include <signal.h>
+#include <filesystem>
 unsigned long GetAddrantiStepTraceCMP_and_CheckIntegrity();
 
 bool make_memory_writable(unsigned int address, size_t size) {
@@ -264,10 +266,73 @@ bool antiBreakpoint(volatile char* func_addr) {
     }
     return 0;
 }
+namespace fs = std::filesystem;
+
+bool is_virtual_mac(const std::string& mac) {
+    // Список префиксов MAC-адресов виртуальных машин
+    const std::vector<std::string> vm_mac_prefixes = {
+        "00:05:69", // VMware
+        "00:0C:29", // VMware
+        "00:1C:14", // VMware
+        "00:50:56", // VMware (ESXi)
+        "08:00:27", // VirtualBox
+        "0A:00:27", // VirtualBox (новые версии)
+        "52:54:00", // QEMU/KVM
+        "00:16:3E", // Xen
+        "00:1A:4A", // KVM (Red Hat)
+        "00:03:FF", // Microsoft Hyper-V
+    };
+
+    for (const auto& prefix : vm_mac_prefixes) {
+        if (mac.rfind(prefix, 0) == 0) { // Проверяем начало MAC-адреса
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_running_in_vm() {
+    const std::string net_dir = "/sys/class/net/";
+    
+    for (const auto& entry : fs::directory_iterator(net_dir)) {
+        if (!entry.is_directory()) continue;
+        
+        std::string interface = entry.path().filename();
+        if (interface == "lo") continue; // Пропускаем loopback
+        
+        std::ifstream mac_file(entry.path() / "address");
+        if (!mac_file) continue;
+        
+        std::string mac;
+        std::getline(mac_file, mac);
+        
+        if (is_virtual_mac(mac)) {
+            return true;
+        }
+    }
+    return false;
+}
+volatile sig_atomic_t is_debugged = 0;
+void handler(int sig) {
+    is_debugged = 0;  
+}
 int main() {
-    //int cpustat=GetCPUID(1);
-    void (*ext_decrypt)() =decrypt;
- //   ext_decrypt();
+
+if (is_running_in_vm()) {
+        return 1;
+    }
+
+
+    signal(SIGTRAP, handler);
+    is_debugged = 1;
+    asm volatile ("int3\n");
+    if (is_debugged) {
+     //   printf("Отладчик обнаружен");
+        _exit(1);  
+    }
+
+
+ //call decrypt
 asm volatile (                    ///ret=call
         "lea rax, [rip + 1f]\n"   
         "push rax\n"    
@@ -373,3 +438,5 @@ asm volatile (                    ///ret=call
 // jnz jz
 //Инструкции перехода с постоянным условием
 //ret=call
+//Проверка на отладку с вставкой int3
+//Проверка mac
