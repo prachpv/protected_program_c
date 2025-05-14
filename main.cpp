@@ -125,18 +125,35 @@ void decrypt(){
     int size=31;
     //offset 5 size 37
     make_memory_writable(int_addr,size);
-
+     srand(time(nullptr));
+    int randbit = rand()%2;
+    if (randbit){
     asm volatile(
-        "next_byte_decrypt:\n"
-        "xor byte ptr[eax],14\n"
-        "ror byte ptr[eax],3\n"
-        "add byte ptr[eax],14\n"
-        "inc eax\n"
-        "loop next_byte_decrypt\n"
-        :
-        : "a" (int_addr), "c" (size) 
-        : "memory" 
+    "decrypt_loop:\n"
+    "xor byte ptr [edx], 0x08\n"   
+    "xor byte ptr [edx], 0x06\n"    
+    "rol byte ptr[edx], 5\n"     
+    "sub byte ptr[edx], -14\n"  
+    "inc edx\n"             
+    "dec ecx\n"   
+    "jnz decrypt_loop\n"  
+    :
+    : "d" (int_addr), "c" (size) // Используем edx и ecx
+    : "memory"
+);
+    }else{
+     asm volatile(
+         "next_byte_decrypt:\n"
+         "xor byte ptr[eax],14\n"
+         "ror byte ptr[eax],3\n"
+         "add byte ptr[eax],14\n"
+         "inc eax\n"
+         "loop next_byte_decrypt\n"
+         :
+         : "a" (int_addr), "c" (size) 
+         : "memory" 
     );
+    }
 }
 bool obfus_cmp(int a,int b){
 
@@ -159,23 +176,6 @@ long long GetTickCountLinux() {
     return (long long)ts.tv_sec * 1000 + (long long)ts.tv_nsec / 1000000;
 }
 bool antiStepTraceCMP_and_CheckIntegrity(int hash_pass,int true_pass){
-    //!!!!! только 32 битный режим 'gcc -m32'
-//     asm goto (
-// 	"push ss\n"    // сохраняем значение сегментного регистра SS в стеке
-// 	"pop ss\n"     // записываем в регистр SS ранее сохраненное значение (перезаписываем SS)
-// 	"pushfd\n"     // команда будет выполнена без останова из-за потери 
-// 	"pop eax\n"    // из стека сохраненное значение регистра флагов помещаем в регистр eax
-// 	"test ah, 1\n" // проверяем значение трассировочного флага (накладываем маск             
-// 	"jz %l[no_step_trace]\n"
-//     :
-//     :
-//     :
-//     :no_step_trace
-// );
-// printf("Step-Trace is detected");
-//     no_step_trace:
-//offset 66
-//size 14
 unsigned int addr=GetAddrantiStepTraceCMP_and_CheckIntegrity();
 int size=14;    
 asm goto(
@@ -322,15 +322,13 @@ if (is_running_in_vm()) {
         return 1;
     }
 
-
-    signal(SIGTRAP, handler);
-    is_debugged = 1;
-    asm volatile ("int3\n");
-    if (is_debugged) {
-     //   printf("Отладчик обнаружен");
-        _exit(1);  
-    }
-
+     signal(SIGTRAP, handler);
+     is_debugged = 1;
+     asm volatile ("int3\n");
+     if (is_debugged) {
+      //   printf("Отладчик обнаружен");
+         _exit(1);  
+     }
 
  //call decrypt
 asm volatile (                    ///ret=call
@@ -396,7 +394,7 @@ asm volatile (                    ///ret=call
         asm volatile (
         "xor eax,eax\n"  /////////////jz jmp
         "jz tag\n"
-        "jmp 0x7fecdab\n"
+        "jmp 0x7fecdab\n"//fake address
         "tag:\n"    
         "jnz inside_mov + 1\n\t" //////////jz jnz
         "jz inside_mov + 1\n\t"
@@ -430,13 +428,15 @@ asm volatile (                    ///ret=call
 }
 
 
-//Случаный вызов функции
-//jmp  в серединк
-//Строка гипервизора
-//Бит гипервизора
-//Проверка /proc/self/status
-// jnz jz
-//Инструкции перехода с постоянным условием
-//ret=call
-//Проверка на отладку с вставкой int3
-//Проверка mac
+//Случаный вызов функции 388
+//jmp  в серединк 402
+//Строка гипервизора 364
+//Бит гипервизора 375 
+//Проверка /proc/self/status 246
+// jnz jz 399
+//Инструкции перехода с постоянным условием 395
+//ret=call 334
+//Проверка на отладку с вставкой int3 325
+//Проверка mac 321
+//Полиморфизм 130
+
